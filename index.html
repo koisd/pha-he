@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#7a4b2a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Phả hệ">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Phả Hệ Gia Đình</title>
+<style>
+  :root {
+    --bg: #faf6ef; --panel: #ffffff; --ink: #2d2118; --muted: #8a7a6a; --line: #e8ddcd;
+    --brand: #7a4b2a; --brand-soft: #f3e7da; --male: #3d7bd9; --male-soft: #e5efff;
+    --female: #d6487e; --female-soft: #ffe8f1; --me: #e0a100; --me-soft: #fff4cc; --danger: #d64545;
+    --shadow: 0 2px 10px rgba(60, 40, 20, .12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1c1814; --panel: #29231d; --ink: #f1e8dd; --muted: #a8998a; --line: #3d342b;
+      --brand: #d9a06b; --brand-soft: #3a2f25; --male: #7aa9ff; --male-soft: #23324a;
+      --female: #ff86b4; --female-soft: #4a2536; --me: #ffc53d; --me-soft: #4a3c12; --shadow: 0 2px 10px rgba(0, 0, 0, .4);
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--ink); font: 16px/1.4 system-ui, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; border: 0; background: none; }
+  .hidden { display: none !important; }
+
+  header { position: fixed; top: 0; left: 0; right: 0; height: calc(52px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 14px 0;
+    display: flex; align-items: center; gap: 10px; background: var(--panel); border-bottom: 1px solid var(--line); z-index: 10; }
+  header h1 { margin: 0; font-size: 19px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  header .hbtn { padding: 6px 10px; border-radius: 10px; background: var(--brand-soft); color: var(--brand); font-weight: 700; font-size: 14px; }
+
+  main { position: fixed; top: calc(52px + env(safe-area-inset-top)); bottom: calc(60px + env(safe-area-inset-bottom)); left: 0; right: 0; overflow: auto; }
+  #pTree { overflow: hidden; touch-action: none; }
+  #svg { width: 100%; height: 100%; display: block; user-select: none; }
+
+  nav { position: fixed; bottom: 0; left: 0; right: 0; height: calc(60px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);
+    display: flex; background: var(--panel); border-top: 1px solid var(--line); z-index: 10; }
+  nav button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 12px; color: var(--muted); font-weight: 600; }
+  nav button span { font-size: 22px; line-height: 1; }
+  nav button.on { color: var(--brand); }
+
+  .fab { position: fixed; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; z-index: 5; }
+  .fab button { width: 48px; height: 48px; border-radius: 50%; background: var(--panel); box-shadow: var(--shadow); font-size: 20px; font-weight: 700; color: var(--brand); }
+
+  .page { max-width: 640px; margin: 0 auto; padding: 14px 14px 30px; }
+  .search { width: 100%; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); margin-bottom: 10px; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--panel); border-radius: 14px; margin-bottom: 8px; box-shadow: var(--shadow); width: 100%; text-align: left; }
+  .av { width: 44px; height: 44px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; background: var(--muted); background-size: cover; background-position: center; }
+  .av.m { background-color: var(--male); } .av.f { background-color: var(--female); }
+  .row .t { flex: 1; min-width: 0; }
+  .row .t b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .t small { color: var(--muted); }
+  .term { font-size: 13px; font-weight: 800; color: var(--brand); white-space: nowrap; }
+  .card { background: var(--panel); border-radius: 16px; padding: 14px; box-shadow: var(--shadow); margin-bottom: 12px; }
+  .card h3 { margin: 0 0 8px; font-size: 16px; }
+  .card p { margin: 6px 0; color: var(--muted); font-size: 14px; }
+  .btn { padding: 11px 16px; border-radius: 12px; background: var(--brand); color: #fff; font-weight: 700; }
+  .btn.soft { background: var(--brand-soft); color: var(--brand); }
+  .btn.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  .btn.block { width: 100%; }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* bảng trượt từ dưới lên */
+  #sheetBg { position: fixed; inset: 0; background: rgba(0, 0, 0, .35); z-index: 20; }
+  #sheet { position: fixed; left: 0; right: 0; bottom: 0; max-height: 88vh; overflow: auto; background: var(--bg); border-radius: 20px 20px 0 0; z-index: 21;
+    padding: 10px 16px calc(20px + env(safe-area-inset-bottom)); box-shadow: 0 -4px 20px rgba(0, 0, 0, .2); max-width: 640px; margin: 0 auto; }
+  #sheet .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 10px; }
+  .who { display: flex; gap: 14px; align-items: center; margin-bottom: 10px; }
+  .who .av { width: 68px; height: 68px; font-size: 26px; }
+  .who h2 { margin: 0; font-size: 21px; }
+  .chain { font-size: 14px; color: var(--muted); margin-top: 2px; }
+  .info { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 15px; margin: 8px 0 14px; }
+  .info dt { color: var(--muted); } .info dd { margin: 0; word-break: break-word; }
+  #sheet a { color: var(--brand); font-weight: 700; text-decoration: none; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .grid2 .btn { padding: 12px 8px; }
+  label.f { display: block; margin-bottom: 10px; font-size: 14px; color: var(--muted); }
+  label.f input, label.f textarea, label.f select { display: block; width: 100%; margin-top: 4px; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font-size: 16px; }
+  .seg { display: flex; gap: 8px; margin-top: 4px; }
+  .seg button { flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); font-weight: 700; }
+  .seg button.on.m { background: var(--male); color: #fff; border-color: var(--male); }
+  .seg button.on.f { background: var(--female); color: #fff; border-color: var(--female); }
+  .seg button.on { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .tabs2 { display: flex; gap: 6px; margin-bottom: 12px; }
+  .tabs2 button { flex: 1; padding: 9px; border-radius: 10px; background: var(--brand-soft); color: var(--brand); font-weight: 700; font-size: 14px; }
+  .tabs2 button.on { background: var(--brand); color: #fff; }
+  #toast { position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--ink); color: var(--bg);
+    padding: 10px 18px; border-radius: 14px; font-weight: 600; z-index: 40; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90vw; text-align: center; }
+  #toast.show { opacity: 1; }
+  .welcome { max-width: 420px; margin: 40px auto; padding: 0 20px; text-align: center; }
+  .welcome .big { font-size: 64px; }
+  .welcome h2 { margin: 6px 0; }
+  .welcome p { color: var(--muted); }
+
+  /* nút trên cây (SVG) */
+  .node rect { fill: var(--panel); stroke-width: 2; }
+  .node.m rect { stroke: var(--male); } .node.f rect { stroke: var(--female); }
+  .node.me rect { stroke: var(--me); stroke-width: 4; fill: var(--me-soft); }
+  .node .nm { font-size: 15px; font-weight: 700; fill: var(--ink); }
+  .node .tm { font-size: 12.5px; font-weight: 800; }
+  .node.m .tm { fill: var(--male); } .node.f .tm { fill: var(--female); } .node.me .tm { fill: var(--me); }
+  .node .yr { font-size: 11.5px; fill: var(--muted); }
+  .node .dead { fill: var(--muted); font-size: 12px; }
+  .edge { stroke: var(--muted); stroke-width: 2; fill: none; opacity: .7; }
+  .edge.sp { stroke: var(--female); stroke-dasharray: 5 4; }
+  .elab { font-size: 11px; fill: var(--muted); font-weight: 700; }
+  .elab-bg { fill: var(--bg); }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">🌳 Phả Hệ</h1>
+  <button class="hbtn" id="bMe">📍 Tôi</button>
+</header>
+
+<main id="pTree"><svg id="svg"></svg>
+  <div class="fab"><button id="zIn">+</button><button id="zOut">−</button><button id="zFit" title="Xem toàn bộ">⤢</button></div>
+</main>
+<main id="pList" class="hidden"><div class="page"><input class="search" id="q" type="search" placeholder="🔍 Tìm theo tên hoặc quan hệ (vd: chú, dì)…"><div id="list"></div></div></main>
+<main id="pMore" class="hidden"><div class="page" id="more"></div></main>
+<main id="pStart" class="hidden"></main>
+
+<nav>
+  <button data-tab="tree" class="on"><span>🌳</span>Cây</button>
+  <button data-tab="list"><span>👥</span>Danh sách</button>
+  <button data-tab="more"><span>⚙️</span>Sao lưu</button>
+</nav>
+
+<div id="sheetBg" class="hidden"></div>
+<div id="sheet" class="hidden"></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* ================== Dữ liệu ================== */
+const KEY = "phahe_v1";
+let D = { people: {}, me: null };
+try { const raw = localStorage.getItem(KEY); if (raw) D = JSON.parse(raw); } catch (e) {}
+D.people ||= {};
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(D)); }
+  catch (e) { toast("⚠️ Không lưu được (bộ nhớ đầy?) — hãy sao lưu ra file"); }
+}
+const uid = () => Math.random().toString(36).slice(2, 10);
+const P = id => D.people[id];
+const all = () => Object.values(D.people);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const childrenOf = id => all().filter(x => (x.parents || []).includes(id));
+function newPerson(o) {
+  const p = { id: uid(), name: "", gender: "m", birth: "", death: "", order: "", phone: "", address: "", note: "", photo: "", parents: [], spouses: [], ...o };
+  D.people[p.id] = p; return p;
+}
+function link(a, b, type) { // type: 'parent' (a là cha/mẹ của b) | 'spouse'
+  if (type === "parent") { const c = P(b); if (!c.parents.includes(a)) c.parents.push(a); }
+  else { if (!P(a).spouses.includes(b)) P(a).spouses.push(b); if (!P(b).spouses.includes(a)) P(b).spouses.push(a); }
+}
+function removePerson(id) {
+  delete D.people[id];
+  all().forEach(x => { x.parents = x.parents.filter(i => i !== id); x.spouses = x.spouses.filter(i => i !== id); });
+  if (D.me === id) D.me = all()[0]?.id || null;
+}
+function toast(m) { const t = document.getElementById("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 2300); }
+const years = p => p.birth || p.death ? `${p.birth || "?"}${p.death ? " – " + p.death : ""}` : "";
+const initials = n => (n.trim().split(/\s+/).pop() || "?").charAt(0).toUpperCase();
+function avatar(p, cls = "av") { return `<div class="${cls} ${p.gender}" style="${p.photo ? `background-image:url(${p.photo})` : ""}">${p.photo ? "" : esc(initials(p.name))}</div>`; }
+
+/* ================== Cách gọi họ hàng (theo kiểu miền Nam) ==================
+   Tìm đường ngắn nhất từ "tôi" tới người đó qua các bước: P = lên cha/mẹ, C = xuống con, S = vợ/chồng.
+   Cặp "P rồi C" sang người khác được gộp thành B = anh chị em ruột. */
+function findPath(from, to) {
+  if (!P(from) || !P(to)) return null;
+  const dist = { [from]: 0 }, prev = {}, q = [[0, from]];
+  while (q.length) {
+    q.sort((a, b) => a[0] - b[0]);
+    const [d, u] = q.shift();
+    if (u === to) break;
+    if (d > dist[u]) continue;
+    const p = P(u);
+    const nb = [...p.parents.map(v => [v, "P", 1]), ...childrenOf(u).map(v => [v.id, "C", 1]), ...p.spouses.map(v => [v, "S", 1.6])];
+    for (const [v, t, w] of nb) {
+      if (!P(v)) continue;
+      const nd = d + w;
+      if (dist[v] === undefined || nd < dist[v]) { dist[v] = nd; prev[v] = [u, t]; q.push([nd, v]); }
+    }
+  }
+  if (dist[to] === undefined) return null;
+  const steps = [];
+  for (let v = to; v !== from; v = prev[v][0]) steps.unshift({ t: prev[v][1], id: v });
+  // gộp P + C thành B (anh chị em)
+  const out = [];
+  for (let i = 0; i < steps.length; i++) {
+    if (steps[i].t === "P" && steps[i + 1]?.t === "C") { out.push({ t: "B", id: steps[i + 1].id, via: steps[i].id }); i++; }
+    else out.push(steps[i]);
+  }
+  return out;
+}
+// a lớn tuổi hơn b? true / false / null (không rõ). Ưu tiên "con thứ mấy", sau đó năm sinh
+function older(a, b) {
+  a = P(a); b = P(b);
+  if (!a || !b) return null;
+  if (a.order && b.order && +a.order !== +b.order) return +a.order < +b.order;
+  if (a.birth && b.birth && +a.birth !== +b.birth) return +a.birth < +b.birth;
+  return null;
+}
+const pick = (o, yes, no, unk) => o === true ? yes : o === false ? no : unk;
+
+function kin(target) {
+  const me = D.me;
+  if (!me || !P(target)) return { term: "", chain: "" };
+  if (target === me) return { term: "Tôi", chain: "" };
+  const path = findPath(me, target);
+  if (!path) return { term: "Chưa nối", chain: "Chưa nối với cây của bạn" };
+  const sig = path.map(s => s.t).join("");
+  const g = P(target).gender === "m";
+  const ids = [me, ...path.map(s => s.id)];
+  const side = path[0].t === "P" ? (P(path[0].id).gender === "m" ? "nội" : "ngoại") : "";
+  const meM = P(me).gender === "m";
+  let term = "";
+  switch (sig) {
+    case "P": term = g ? "Cha" : "Mẹ"; break;
+    case "PP": term = (g ? "Ông " : "Bà ") + side; break;
+    case "PPP": term = (g ? "Ông cố " : "Bà cố ") + side; break;
+    case "PPPP": term = g ? "Ông sơ" : "Bà sơ"; break;
+    case "B": term = pick(older(target, me), g ? "Anh" : "Chị", g ? "Em trai" : "Em gái", g ? "Anh / em trai" : "Chị / em gái"); break;
+    case "BS": { const sib = ids[1]; const sibM = P(sib).gender === "m"; const o = older(sib, me);
+      term = sibM ? pick(o, "Chị dâu", "Em dâu", "Chị / em dâu") : pick(o, "Anh rể", "Em rể", "Anh / em rể"); break; }
+    case "BC": term = g ? "Cháu trai" : "Cháu gái"; break;
+    case "BCC": term = "Cháu (đời sau)"; break;
+    case "PB": term = uncleTerm(ids[1], target); break;
+    case "PBS": { const u = uncleTerm(ids[1], ids[2]); term = { "Bác": "Bác", "Chú": "Thím", "Cô": "Dượng", "Cậu": "Mợ", "Dì": "Dượng", "Chú / Bác": "Thím / Bác" }[u] || "Dâu / rể của ông bà"; break; }
+    case "PBC": { const o = older(ids[2], ids[1]); term = pick(o, g ? "Anh họ" : "Chị họ", "Em họ", "Anh chị em họ"); break; }
+    case "PBCC": term = "Cháu họ"; break;
+    case "PPB": term = (g ? "Ông" : "Bà") + ` (anh chị em của ông bà ${side})`; break;
+    case "PPBC": term = side === "nội" ? (g ? "Chú / Bác họ" : "Cô họ") : (g ? "Cậu họ" : "Dì họ"); break;
+    case "PPBCC": term = "Anh chị em họ (xa)"; break;
+    case "C": term = g ? "Con trai" : "Con gái"; break;
+    case "CS": term = g ? "Con rể" : "Con dâu"; break;
+    case "CC": term = "Cháu " + (P(ids[1]).gender === "m" ? "nội" : "ngoại"); break;
+    case "CCC": term = "Chắt"; break;
+    case "S": term = g ? "Chồng" : "Vợ"; break;
+    case "SP": term = (g ? "Cha " : "Mẹ ") + (meM ? "vợ" : "chồng"); break;
+    case "SB": term = pick(older(target, ids[1]), g ? "Anh " : "Chị ", "Em ", g ? "Anh/em " : "Chị/em ") + (meM ? "vợ" : "chồng"); break;
+    case "SBC": term = "Cháu (bên " + (meM ? "vợ" : "chồng") + ")"; break;
+    case "PS": term = g ? "Cha dượng" : "Mẹ kế"; break;
+    case "SC": term = "Con riêng của " + (meM ? "vợ" : "chồng"); break;
+    case "CSP": term = "Sui gia"; break;
+    default: term = "Họ hàng";
+  }
+  return { term, chain: describe(path) };
+}
+function uncleTerm(parentId, sibId) {
+  const s = P(sibId), father = P(parentId).gender === "m";
+  if (father) return s.gender === "m" ? pick(older(sibId, parentId), "Bác", "Chú", "Chú / Bác") : "Cô";
+  return s.gender === "m" ? "Cậu" : "Dì";
+}
+// "con trai của em gái của mẹ bạn"
+function describe(path) {
+  const ids = [D.me, ...path.map(s => s.id)];
+  const word = (st, i) => {
+    const p = P(st.id), m = p.gender === "m", prevId = ids[i];
+    if (st.t === "P") return m ? "cha" : "mẹ";
+    if (st.t === "C") return m ? "con trai" : "con gái";
+    if (st.t === "S") return m ? "chồng" : "vợ";
+    return pick(older(st.id, prevId), m ? "anh" : "chị", m ? "em trai" : "em gái", m ? "anh/em trai" : "chị/em gái");
+  };
+  const parts = path.map((s, i) => word(s, i));
+  return parts.reverse().join(" của ") + " của bạn";
+}
+
+/* ================== Bố cục cây ==================
+   Đời (thế hệ) tính từ người "tôi": cha mẹ = -1, con = +1, vợ chồng cùng đời.
+   Trong mỗi đời, gom vợ chồng đứng cạnh nhau rồi sắp theo vị trí cha mẹ / con cái vài vòng cho đỡ chéo dây. */
+const NW = 150, NH = 70, GX = 24, GY = 120;
+function layout() {
+  const ids = Object.keys(D.people);
+  if (!ids.length) return { nodes: {}, gens: {} };
+  const gen = {};
+  const start = P(D.me) ? D.me : ids[0];
+  const visit = s => {
+    const q = [s]; if (gen[s] === undefined) gen[s] = 0;
+    while (q.length) {
+      const u = q.shift(), p = P(u);
+      const nb = [...p.parents.map(v => [v, -1]), ...childrenOf(u).map(c => [c.id, 1]), ...p.spouses.map(v => [v, 0])];
+      for (const [v, d] of nb) if (P(v) && gen[v] === undefined) { gen[v] = gen[u] + d; q.push(v); }
+    }
+  };
+  visit(start);
+  ids.forEach(i => { if (gen[i] === undefined) visit(i); }); // nhánh rời
+  const byGen = {};
+  ids.forEach(i => (byGen[gen[i]] ||= []).push(i));
+  const gList = Object.keys(byGen).map(Number).sort((a, b) => a - b);
+  // gom thành "cụm vợ chồng"
+  const units = {};
+  gList.forEach(g => {
+    const seen = new Set(), us = [];
+    byGen[g].forEach(i => {
+      if (seen.has(i)) return;
+      const u = [i]; seen.add(i);
+      P(i).spouses.forEach(s => { if (!seen.has(s) && gen[s] === g) { u.push(s); seen.add(s); } });
+      // chồng bên trái, vợ bên phải cho dễ nhìn
+      u.sort((a, b) => (P(a).gender === "m" ? 0 : 1) - (P(b).gender === "m" ? 0 : 1));
+      us.push(u);
+    });
+    units[g] = us;
+  });
+  const pos = {};
+  const place = () => gList.forEach(g => { let x = 0; units[g].forEach(u => u.forEach(i => { pos[i] = x; x += NW + GX; }) || (x += GX)); });
+  place();
+  const avg = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
+  for (let it = 0; it < 6; it++) {
+    gList.forEach(g => units[g].forEach(u => { u.key = avg(u.flatMap(i => P(i).parents.filter(p => pos[p] !== undefined).map(p => pos[p]))) ?? u.key ?? pos[u[0]]; }));
+    gList.forEach(g => { units[g].sort((a, b) => a.key - b.key); });
+    place();
+    [...gList].reverse().forEach(g => units[g].forEach(u => { const k = avg(u.flatMap(i => childrenOf(i).map(c => pos[c.id]))); u.key = k ?? pos[u[0]]; }));
+    gList.forEach(g => units[g].sort((a, b) => a.key - b.key));
+    place();
+  }
+  // căn giữa từng đời theo vị trí "lý tưởng" (trung bình cha mẹ) để cây thẳng hơn
+  gList.forEach(g => {
+    const row = units[g].flat(); if (!row.length) return;
+    const ideal = avg(row.map(i => { const ps = P(i).parents.filter(p => pos[p] !== undefined); return ps.length ? avg(ps.map(p => pos[p])) : pos[i]; }));
+    const cur = avg(row.map(i => pos[i])); const sh = ideal - cur;
+    row.forEach(i => pos[i] += sh);
+  });
+  const nodes = {};
+  ids.forEach(i => nodes[i] = { x: pos[i], y: (gen[i] - gList[0]) * (NH + GY) });
+  return { nodes, gens: gen };
+}
+
+/* ================== Vẽ cây (SVG) ================== */
+const svg = document.getElementById("svg");
+let view = { x: 0, y: 0, k: 1 }, lastLayout = null;
+function renderTree() {
+  const L = lastLayout = layout(), N = L.nodes;
+  let edges = "", labels = "", nodes = "";
+  const done = new Set();
+  // vợ chồng
+  all().forEach(p => p.spouses.forEach(s => {
+    const k = [p.id, s].sort().join("|"); if (done.has(k) || !N[s]) return; done.add(k);
+    const a = N[p.id], b = N[s]; const [l, r] = a.x < b.x ? [a, b] : [b, a];
+    const y = a.y + NH / 2;
+    if (a.y === b.y) { edges += `<path class="edge sp" d="M${l.x + NW} ${y} H${r.x}"/>`; }
+    else edges += `<path class="edge sp" d="M${a.x + NW / 2} ${a.y + NH / 2} L${b.x + NW / 2} ${b.y + NH / 2}"/>`;
+  }));
+  // cha mẹ → con: xuất phát từ giữa cặp cha mẹ
+  all().forEach(c => {
+    const ps = c.parents.filter(p => N[p]); if (!ps.length) return;
+    const px = ps.reduce((s, p) => s + N[p].x + NW / 2, 0) / ps.length;
+    const py = Math.max(...ps.map(p => N[p].y)) + (ps.length > 1 ? NH / 2 : NH);
+    const cx = N[c.id].x + NW / 2, cy = N[c.id].y;
+    const mid = cy - GY / 2.4;
+    edges += `<path class="edge" d="M${px} ${py} V${mid} H${cx} V${cy}"/>`;
+    const t = c.gender === "m" ? "con trai" : "con gái";
+    const w = t.length * 6.2 + 8;
+    labels += `<rect class="elab-bg" x="${cx - w / 2}" y="${cy - 24}" width="${w}" height="15" rx="4"/><text class="elab" x="${cx}" y="${cy - 13}" text-anchor="middle">${t}</text>`;
+  });
+  all().forEach(p => {
+    const n = N[p.id]; if (!n) return;
+    const k = kin(p.id), me = p.id === D.me;
+    let nm = p.name || "(chưa đặt tên)"; if (nm.length > 18) nm = nm.slice(0, 17) + "…";
+    nodes += `<g class="node ${p.gender} ${me ? "me" : ""}" data-id="${p.id}" transform="translate(${n.x},${n.y})">
+      <rect width="${NW}" height="${NH}" rx="14"/>
+      <text class="tm" x="${NW / 2}" y="20" text-anchor="middle">${esc(me ? "⭐ TÔI" : k.term)}</text>
+      <text class="nm" x="${NW / 2}" y="42" text-anchor="middle">${esc(nm)}</text>
+      <text class="yr" x="${NW / 2}" y="60" text-anchor="middle">${esc(years(p))}${p.death ? " ✝" : ""}</text></g>`;
+  });
+  svg.innerHTML = `<g id="vp">${edges}${labels}${nodes}</g>`;
+  applyView();
+}
+function applyView() { const g = document.getElementById("vp"); if (g) g.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.k})`); }
+function bounds() {
+  const N = lastLayout?.nodes || {}; const v = Object.values(N);
+  if (!v.length) return null;
+  return { x0: Math.min(...v.map(n => n.x)), x1: Math.max(...v.map(n => n.x)) + NW, y0: Math.min(...v.map(n => n.y)), y1: Math.max(...v.map(n => n.y)) + NH };
+}
+function fitAll() {
+  const b = bounds(); if (!b) return;
+  const W = svg.clientWidth, H = svg.clientHeight, pad = 30;
+  view.k = Math.min(1.2, (W - pad * 2) / (b.x1 - b.x0), (H - pad * 2) / (b.y1 - b.y0));
+  view.x = (W - (b.x1 - b.x0) * view.k) / 2 - b.x0 * view.k;
+  view.y = (H - (b.y1 - b.y0) * view.k) / 2 - b.y0 * view.k;
+  applyView();
+}
+function centerOn(id, k = Math.max(view.k, 0.9)) {
+  const n = lastLayout?.nodes[id]; if (!n) return;
+  view.k = k; view.x = svg.clientWidth / 2 - (n.x + NW / 2) * k; view.y = svg.clientHeight / 2.4 - (n.y + NH / 2) * k; applyView();
+}
+function zoomAt(f, cx = svg.clientWidth / 2, cy = svg.clientHeight / 2) {
+  const k = Math.min(3, Math.max(0.15, view.k * f)); f = k / view.k;
+  view.x = cx - (cx - view.x) * f; view.y = cy - (cy - view.y) * f; view.k = k; applyView();
+}
+// kéo / chụm 2 ngón / con lăn chuột
+const ptr = new Map(); let moved = 0, pinch = null;
+svg.addEventListener("pointerdown", e => { svg.setPointerCapture(e.pointerId); ptr.set(e.pointerId, [e.clientX, e.clientY]); moved = 0; if (ptr.size === 2) pinch = null; });
+svg.addEventListener("pointermove", e => {
+  if (!ptr.has(e.pointerId)) return;
+  const [ox, oy] = ptr.get(e.pointerId); ptr.set(e.pointerId, [e.clientX, e.clientY]);
+  if (ptr.size === 1) { view.x += e.clientX - ox; view.y += e.clientY - oy; moved += Math.abs(e.clientX - ox) + Math.abs(e.clientY - oy); applyView(); }
+  else if (ptr.size === 2) {
+    const [a, b] = [...ptr.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const r = svg.getBoundingClientRect(); const cx = (a[0] + b[0]) / 2 - r.left, cy = (a[1] + b[1]) / 2 - r.top;
+    if (pinch) { zoomAt(d / pinch.d, cx, cy); view.x += cx - pinch.cx; view.y += cy - pinch.cy; applyView(); }
+    pinch = { d, cx, cy }; moved = 99;
+  }
+});
+const up = e => { ptr.delete(e.pointerId); if (ptr.size < 2) pinch = null; };
+svg.addEventListener("pointerup", e => {
+  if (moved < 8 && ptr.size === 1) { const g = e.target.closest(".node"); if (g) openPerson(g.dataset.id); }
+  up(e);
+});
+svg.addEventListener("pointercancel", up);
+svg.addEventListener("wheel", e => { e.preventDefault(); const r = svg.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+document.getElementById("zIn").onclick = () => zoomAt(1.25);
+document.getElementById("zOut").onclick = () => zoomAt(0.8);
+document.getElementById("zFit").onclick = fitAll;
+document.getElementById("bMe").onclick = () => { show("tree"); if (D.me) centerOn(D.me, 1); };
+
+/* ================== Danh sách ================== */
+const norm = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
+function renderList() {
+  const q = norm(document.getElementById("q").value.trim());
+  const rows = all().map(p => ({ p, k: kin(p.id) }))
+    .filter(r => !q || norm(r.p.name + " " + r.k.term).includes(q))
+    .sort((a, b) => (a.p.id === D.me ? -1 : b.p.id === D.me ? 1 : 0) || (lastLayout?.gens[a.p.id] ?? 0) - (lastLayout?.gens[b.p.id] ?? 0) || a.p.name.localeCompare(b.p.name, "vi"));
+  document.getElementById("list").innerHTML = rows.length ? rows.map(({ p, k }) => `<button class="row" data-open="${p.id}">${avatar(p)}
+      <div class="t"><b>${esc(p.name || "(chưa đặt tên)")}</b><small>${esc(years(p))}${p.phone ? " · " + esc(p.phone) : ""}</small></div>
+      <span class="term">${esc(p.id === D.me ? "⭐ Tôi" : k.term)}</span></button>`).join("")
+    : `<p style="text-align:center;color:var(--muted)">Không tìm thấy ai.</p>`;
+}
+document.getElementById("q").addEventListener("input", renderList);
+
+/* ================== Bảng thông tin một người ================== */
+const sheet = document.getElementById("sheet"), sheetBg = document.getElementById("sheetBg");
+function openSheet(html) { sheet.innerHTML = `<div class="grab"></div>` + html; sheet.classList.remove("hidden"); sheetBg.classList.remove("hidden"); sheet.scrollTop = 0; }
+function closeSheet() { sheet.classList.add("hidden"); sheetBg.classList.add("hidden"); }
+sheetBg.onclick = closeSheet;
+
+function openPerson(id) {
+  const p = P(id); if (!p) return;
+  const k = kin(id), me = id === D.me;
+  const rel = (label, list) => list.length ? `<dt>${label}</dt><dd>${list.map(x => `<a href="#" data-open="${x.id}">${esc(x.name)}</a>`).join(", ")}</dd>` : "";
+  const parents = p.parents.map(P).filter(Boolean), spouses = p.spouses.map(P).filter(Boolean), kids = childrenOf(id);
+  openSheet(`<div class="who">${avatar(p)}<div><h2>${esc(p.name || "(chưa đặt tên)")}</h2>
+      <div class="term">${me ? "⭐ Đây là bạn" : esc(k.term)}</div>${!me && k.chain ? `<div class="chain">${esc(k.chain)}</div>` : ""}</div></div>
+    <dl class="info">
+      ${p.birth ? `<dt>Năm sinh</dt><dd>${esc(p.birth)}</dd>` : ""}${p.death ? `<dt>Năm mất</dt><dd>${esc(p.death)}</dd>` : ""}
+      ${p.order ? `<dt>Con thứ</dt><dd>${esc(p.order)}</dd>` : ""}
+      ${p.phone ? `<dt>Điện thoại</dt><dd><a href="tel:${esc(p.phone.replace(/\s/g, ""))}">${esc(p.phone)}</a></dd>` : ""}
+      ${p.address ? `<dt>Địa chỉ</dt><dd>${esc(p.address)}</dd>` : ""}
+      ${rel("Cha mẹ", parents)}${rel("Vợ / chồng", spouses)}${rel("Con", kids)}
+      ${p.note ? `<dt>Ghi chú</dt><dd>${esc(p.note).replace(/\n/g, "<br>")}</dd>` : ""}
+    </dl>
+    <h3 style="margin:4px 0 8px">➕ Thêm người thân của ${esc(p.name.split(" ").pop() || "người này")}</h3>
+    <div class="grid2">
+      <button class="btn soft" data-add="father" data-id="${id}">👨 Cha</button>
+      <button class="btn soft" data-add="mother" data-id="${id}">👩 Mẹ</button>
+      <button class="btn soft" data-add="spouse" data-id="${id}">💍 Vợ / chồng</button>
+      <button class="btn soft" data-add="child" data-id="${id}">👶 Con</button>
+      <button class="btn soft" data-add="sibling" data-id="${id}" style="grid-column:span 2">🧑‍🤝‍🧑 Anh / chị / em ruột</button>
+    </div>
+    <div class="btns">
+      <button class="btn" data-edit="${id}">✏️ Sửa thông tin</button>
+      ${me ? "" : `<button class="btn soft" data-setme="${id}">📍 Đây là tôi</button>`}
+      <button class="btn soft" data-center="${id}">🎯 Xem trên cây</button>
+      <button class="btn danger" data-del="${id}">🗑 Xóa</button>
+    </div>`);
+}
+
+const ADD_LABEL = { father: "Thêm cha", mother: "Thêm mẹ", spouse: "Thêm vợ / chồng", child: "Thêm con", sibling: "Thêm anh / chị / em" };
+let form = null; // {mode:'edit'|'add', id, rel, gender, photo, useExisting}
+function personForm(f) {
+  form = f;
+  const p = f.mode === "edit" ? P(f.id) : { name: "", gender: f.gender, birth: "", death: "", order: "", phone: "", address: "", note: "", photo: "" };
+  f.photo = f.photo ?? p.photo;
+  const base = f.mode === "add" ? P(f.id) : null;
+  const fixedG = f.rel === "father" || f.rel === "mother";
+  let otherParent = "";
+  if (f.rel === "child" && base.spouses.length) {
+    otherParent = `<label class="f">Cha / mẹ còn lại<select id="fOther">${base.spouses.map(s => `<option value="${s}">${esc(P(s).name)}</option>`).join("")}<option value="">(không rõ / không thêm)</option></select></label>`;
+  }
+  const exist = f.mode === "add" ? all().filter(x => x.id !== f.id && !(f.rel === "child" && base.parents.includes(x.id))).sort((a, b) => a.name.localeCompare(b.name, "vi")) : [];
+  openSheet(`<h2 style="margin:0 0 12px">${f.mode === "edit" ? "✏️ Sửa thông tin" : ADD_LABEL[f.rel] + " cho " + esc(base.name)}</h2>
+    ${f.mode === "add" && exist.length ? `<div class="tabs2"><button data-src="new" class="${f.useExisting ? "" : "on"}">Người mới</button><button data-src="old" class="${f.useExisting ? "on" : ""}">Chọn người đã có</button></div>` : ""}
+    ${f.useExisting ? `<label class="f">Chọn người<select id="fExist">${exist.map(x => `<option value="${x.id}">${esc(x.name)} ${x.birth ? "(" + x.birth + ")" : ""}</option>`).join("")}</select></label>${otherParent}` : `
+    <label class="f">Họ và tên<input id="fName" value="${esc(p.name)}" placeholder="VD: Nguyễn Văn A" autocomplete="off"></label>
+    ${fixedG ? "" : `<label class="f">Giới tính<div class="seg"><button data-g="m" class="m ${f.gender === "m" ? "on" : ""}">Nam</button><button data-g="f" class="f ${f.gender === "f" ? "on" : ""}">Nữ</button></div></label>`}
+    <div class="grid2" style="margin:0"><label class="f">Năm sinh<input id="fBirth" inputmode="numeric" value="${esc(p.birth)}" placeholder="VD: 1965"></label>
+      <label class="f">Năm mất<input id="fDeath" inputmode="numeric" value="${esc(p.death)}" placeholder="để trống nếu còn"></label></div>
+    <label class="f">Con thứ mấy trong nhà <small>(để biết anh/em, chú/bác)</small><input id="fOrder" inputmode="numeric" value="${esc(p.order)}" placeholder="VD: 2"></label>
+    ${otherParent}
+    <label class="f">Số điện thoại<input id="fPhone" inputmode="tel" value="${esc(p.phone)}"></label>
+    <label class="f">Địa chỉ / quê quán<input id="fAddr" value="${esc(p.address)}"></label>
+    <label class="f">Ghi chú<textarea id="fNote" rows="3">${esc(p.note)}</textarea></label>
+    <label class="f">Ảnh<div class="btns" style="align-items:center;margin-top:6px">${f.photo ? `<div class="av" style="background-image:url(${f.photo})"></div>` : ""}
+      <button class="btn soft" id="fPhotoBtn" type="button">📷 ${f.photo ? "Đổi ảnh" : "Chọn ảnh"}</button>${f.photo ? `<button class="btn soft" id="fPhotoDel" type="button">Bỏ ảnh</button>` : ""}</div></label>`}
+    <div class="btns" style="margin-top:6px"><button class="btn" id="fSave">💾 Lưu</button><button class="btn soft" id="fCancel">Hủy</button></div>`);
+}
+function readForm() {
+  return {
+    name: document.getElementById("fName").value.trim(), gender: form.gender,
+    birth: document.getElementById("fBirth").value.trim(), death: document.getElementById("fDeath").value.trim(),
+    order: document.getElementById("fOrder").value.trim(), phone: document.getElementById("fPhone").value.trim(),
+    address: document.getElementById("fAddr").value.trim(), note: document.getElementById("fNote").value.trim(), photo: form.photo || "",
+  };
+}
+function saveForm() {
+  const f = form;
+  if (f.mode === "edit") {
+    const v = readForm(); if (!v.name) return toast("Nhập họ tên");
+    Object.assign(P(f.id), v); save(); refresh(); openPerson(f.id); return toast("✔ Đã lưu");
+  }
+  const base = P(f.id);
+  let target, made = false;
+  if (f.useExisting) target = P(document.getElementById("fExist").value);
+  else { const v = readForm(); if (!v.name) return toast("Nhập họ tên"); target = newPerson(v); }
+  const other = document.getElementById("fOther")?.value;
+  if (f.rel === "father" || f.rel === "mother") {
+    const same = base.parents.map(P).find(x => x && x.gender === target.gender && x.id !== target.id);
+    if (same) { if (!f.useExisting) delete D.people[target.id]; return toast(`${base.name} đã có ${f.rel === "father" ? "cha" : "mẹ"}: ${same.name}`); }
+    link(target.id, base.id, "parent");
+    base.parents.filter(x => x !== target.id).forEach(o => link(o, target.id, "spouse")); // cha mẹ thành vợ chồng
+  } else if (f.rel === "spouse") link(base.id, target.id, "spouse");
+  else if (f.rel === "child") { link(base.id, target.id, "parent"); if (other) link(other, target.id, "parent"); }
+  else if (f.rel === "sibling") {
+    if (!base.parents.length) { // chưa có cha mẹ thì tạo tạm để nối anh em
+      const fa = newPerson({ name: "Cha của " + base.name, gender: "m" }), mo = newPerson({ name: "Mẹ của " + base.name, gender: "f" });
+      link(fa.id, base.id, "parent"); link(mo.id, base.id, "parent"); link(fa.id, mo.id, "spouse");
+      toast("Đã tạo tạm cha mẹ — bấm vào để sửa tên"); made = true;
+    }
+    base.parents.forEach(pa => link(pa, target.id, "parent"));
+  }
+  save(); refresh(); openPerson(target.id);
+  if (!made) toast("✔ Đã thêm");
+}
+function pickPhoto() {
+  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
+  inp.onchange = () => {
+    const file = inp.files[0]; if (!file) return;
+    const img = new Image(); img.onload = () => {
+      const s = 160, c = document.createElement("canvas"); c.width = c.height = s;
+      const r = Math.max(s / img.width, s / img.height), w = img.width * r, h = img.height * r;
+      c.getContext("2d").drawImage(img, (s - w) / 2, (s - h) / 2, w, h);
+      const keep = { ...readForm() }; form.photo = c.toDataURL("image/jpeg", 0.8); URL.revokeObjectURL(img.src);
+      personForm(form); restoreForm(keep);
+    };
+    img.src = URL.createObjectURL(file);
+  };
+  inp.click();
+}
+function restoreForm(v) {
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+  set("fName", v.name); set("fBirth", v.birth); set("fDeath", v.death); set("fOrder", v.order); set("fPhone", v.phone); set("fAddr", v.address); set("fNote", v.note);
+}
+
+sheet.addEventListener("click", e => {
+  const t = e.target.closest("button, a"); if (!t) return;
+  const d = t.dataset;
+  if (d.open) { e.preventDefault(); return openPerson(d.open); }
+  if (d.add) { const g = d.add === "father" ? "m" : d.add === "mother" ? "f" : d.add === "spouse" ? (P(d.id).gender === "m" ? "f" : "m") : "m"; return personForm({ mode: "add", id: d.id, rel: d.add, gender: g, photo: "", useExisting: false }); }
+  if (d.edit) return personForm({ mode: "edit", id: d.edit, gender: P(d.edit).gender });
+  if (d.setme) { D.me = d.setme; save(); refresh(); openPerson(d.setme); return toast("📍 Đã đặt làm \"Tôi\" — mọi quan hệ tính theo người này"); }
+  if (d.center) { closeSheet(); show("tree"); return centerOn(d.center, 1); }
+  if (d.del) {
+    if (!t.dataset.armed) { t.dataset.armed = 1; t.textContent = "Bấm lần nữa để xóa"; return setTimeout(() => { if (t.isConnected) { delete t.dataset.armed; t.textContent = "🗑 Xóa"; } }, 3000); }
+    removePerson(d.del); save(); closeSheet(); refresh(); return toast("Đã xóa");
+  }
+  if (d.g) { const keep = readForm(); form.gender = d.g; personForm(form); return restoreForm(keep); }
+  if (d.src) { form.useExisting = d.src === "old"; return personForm(form); }
+  if (t.id === "fPhotoBtn") return pickPhoto();
+  if (t.id === "fPhotoDel") { const keep = readForm(); form.photo = ""; personForm(form); return restoreForm(keep); }
+  if (t.id === "fSave") return saveForm();
+  if (t.id === "fCancel") return form.mode === "edit" || form.id ? openPerson(form.id) : closeSheet();
+});
+document.getElementById("list").addEventListener("click", e => { const r = e.target.closest("[data-open]"); if (r) openPerson(r.dataset.open); });
+
+/* ================== Sao lưu ================== */
+function renderMore() {
+  const n = all().length;
+  document.getElementById("more").innerHTML = `
+    <div class="card"><h3>💾 Dữ liệu</h3><p>Cây có <b>${n}</b> người. Dữ liệu chỉ nằm trong trình duyệt của <b>điện thoại này</b> — xóa dữ liệu trình duyệt là mất, nên sao lưu thường xuyên.</p>
+      <div class="btns"><button class="btn" id="bExport">⬇️ Sao lưu ra file</button><button class="btn soft" id="bImport">⬆️ Mở file sao lưu</button></div>
+      <p>File sao lưu (.json) gửi qua Zalo / Messenger cho người nhà, họ mở bằng nút "Mở file sao lưu" là có cùng cây.</p></div>
+    <div class="card"><h3>📱 Cài như app</h3><p><b>Android (Chrome):</b> bấm ⋮ → <b>Thêm vào màn hình chính</b>.<br><b>iPhone (Safari):</b> bấm nút Chia sẻ → <b>Thêm vào MH chính</b>.<br>Sau đó mở như app bình thường, không cần mạng.</p></div>
+    <div class="card"><h3>💡 Mẹo</h3><p>• Điền <b>năm sinh</b> hoặc <b>con thứ mấy</b> để app phân biệt anh/em, chú/bác, anh họ/em họ.<br>
+      • Người nào đã có trên cây mà cần nối thêm (VD: vợ của chú), chọn <b>"Chọn người đã có"</b> khi thêm quan hệ.<br>• Cách gọi theo kiểu miền Nam (cô, dượng, cậu, mợ, dì…).</p></div>
+    <div class="card"><h3>🗑 Làm lại từ đầu</h3><button class="btn danger" id="bWipe">Xóa toàn bộ cây trên máy này</button></div>`;
+  document.getElementById("bExport").onclick = exportData;
+  document.getElementById("bImport").onclick = importData;
+  document.getElementById("bWipe").onclick = e => {
+    const t = e.target; if (!t.dataset.armed) { t.dataset.armed = 1; t.textContent = "Chắc chưa? Bấm lần nữa"; return; }
+    D = { people: {}, me: null }; save(); refresh(); toast("Đã xóa hết");
+  };
+}
+async function exportData() {
+  const name = `pha-he_${new Date().toISOString().slice(0, 10)}.json`;
+  const blob = new Blob([JSON.stringify(D)], { type: "application/json" });
+  const file = new File([blob], name, { type: "application/json" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: "Sao lưu phả hệ" }); return; } catch (e) { if (e.name === "AbortError") return; }
+  }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast("⬇️ Đã lưu file sao lưu");
+}
+function importData() {
+  const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".json,application/json";
+  inp.onchange = () => {
+    const f = inp.files[0]; if (!f) return;
+    const rd = new FileReader(); rd.onload = () => {
+      try {
+        const d = JSON.parse(rd.result); if (!d.people) throw 0;
+        Object.values(d.people).forEach(p => { p.parents ||= []; p.spouses ||= []; });
+        D = d; save(); refresh(); show("tree"); setTimeout(fitAll, 50); toast(`✔ Đã mở cây ${Object.keys(d.people).length} người`);
+      } catch (e) { toast("File không đúng định dạng"); }
+    };
+    rd.readAsText(f);
+  };
+  inp.click();
+}
+
+/* ================== Màn hình bắt đầu ================== */
+function renderStart() {
+  document.getElementById("pStart").innerHTML = `<div class="welcome"><div class="big">🌳</div><h2>Phả Hệ Gia Đình</h2>
+    <p>Bắt đầu bằng chính bạn, rồi thêm cha mẹ, ông bà, cô chú, anh chị em… App tự cho biết mỗi người là gì của bạn.</p>
+    <div class="card" style="text-align:left">
+      <label class="f">Họ và tên của bạn<input id="sName" placeholder="VD: Nguyễn Văn A"></label>
+      <label class="f">Giới tính<div class="seg" id="sG"><button data-g="m" class="m on">Nam</button><button data-g="f" class="f">Nữ</button></div></label>
+      <label class="f">Năm sinh<input id="sBirth" inputmode="numeric" placeholder="VD: 2000"></label>
+      <button class="btn block" id="sGo">Bắt đầu</button></div>
+    <button class="btn soft" id="sImport">⬆️ Hoặc mở file sao lưu có sẵn</button></div>`;
+  let g = "m";
+  document.getElementById("sG").onclick = e => { const b = e.target.closest("button"); if (!b) return; g = b.dataset.g; document.querySelectorAll("#sG button").forEach(x => x.classList.toggle("on", x === b)); };
+  document.getElementById("sGo").onclick = () => {
+    const name = document.getElementById("sName").value.trim(); if (!name) return toast("Nhập tên của bạn");
+    const me = newPerson({ name, gender: g, birth: document.getElementById("sBirth").value.trim() }); D.me = me.id; save(); refresh();
+    setTimeout(() => { centerOn(me.id, 1); openPerson(me.id); }, 60);
+  };
+  document.getElementById("sImport").onclick = importData;
+}
+
+/* ================== Điều hướng ================== */
+let tab = "tree";
+function show(t) {
+  tab = t;
+  const empty = !all().length;
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === t));
+  document.getElementById("pTree").classList.toggle("hidden", empty || t !== "tree");
+  document.getElementById("pList").classList.toggle("hidden", empty || t !== "list");
+  document.getElementById("pMore").classList.toggle("hidden", t !== "more");
+  document.getElementById("pStart").classList.toggle("hidden", !(empty && t !== "more"));
+  if (t === "list") renderList();
+  if (t === "more") renderMore();
+}
+document.querySelector("nav").addEventListener("click", e => { const b = e.target.closest("button"); if (b) show(b.dataset.tab); });
+function refresh() {
+  const empty = !all().length;
+  if (!empty && !P(D.me)) D.me = all()[0].id;
+  document.getElementById("title").textContent = empty ? "🌳 Phả Hệ" : `🌳 Họ hàng của ${P(D.me).name.split(" ").pop()}`;
+  if (empty) renderStart(); else renderTree();
+  show(tab);
+}
+refresh();
+if (all().length) setTimeout(() => D.me ? centerOn(D.me, 1) : fitAll(), 50);
+addEventListener("resize", () => applyView());
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
