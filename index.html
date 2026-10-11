@@ -249,6 +249,7 @@ function kin(target) {
     case "SB": term = pick(older(target, ids[1]), g ? "Anh " : "Chị ", "Em ", g ? "Anh/em " : "Chị/em ") + (meM ? "vợ" : "chồng"); break;
     case "SBC": term = "Cháu (bên " + (meM ? "vợ" : "chồng") + ")"; break;
     case "PS": term = g ? "Cha dượng" : "Mẹ kế"; break;
+    case "PPS": term = (g ? "Ông " : "Bà ") + side; break; // vợ / chồng khác của ông bà
     case "SC": term = "Con riêng của " + (meM ? "vợ" : "chồng"); break;
     case "CSP": term = "Sui gia"; break;
     default: term = "Họ hàng";
@@ -304,8 +305,13 @@ function layout() {
       if (seen.has(i)) return;
       const u = [i]; seen.add(i);
       P(i).spouses.forEach(s => { if (!seen.has(s) && gen[s] === g) { u.push(s); seen.add(s); } });
-      // chồng bên trái, vợ bên phải cho dễ nhìn
+      // chồng bên trái, vợ bên phải; người có nhiều vợ/chồng thì đứng giữa (bà – ông – bà)
       u.sort((a, b) => (P(a).gender === "m" ? 0 : 1) - (P(b).gender === "m" ? 0 : 1));
+      if (u.length > 2) {
+        const c = u.reduce((m, x) => P(x).spouses.length > P(m).spouses.length ? x : m, u[0]);
+        const rest = u.filter(x => x !== c);
+        u.length = 0; u.push(rest[0], c, ...rest.slice(1));
+      }
       us.push(u);
     });
     units[g] = us;

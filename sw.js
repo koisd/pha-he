@@ -1,5 +1,5 @@
 // Lưu sẵn các file của app để mở được khi không có mạng. Đổi VER mỗi lần cập nhật app.
-const VER = "phahe-1";
+const VER = "phahe-2";
 const FILES = ["./", "index.html", "manifest.json", "icon.svg", "icon-192.png", "icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(VER).then(c => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener("activate", e => {
