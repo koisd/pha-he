@@ -112,11 +112,21 @@
   .edge.sp { stroke: var(--female); stroke-dasharray: 5 4; }
   .elab { font-size: 11px; fill: var(--muted); font-weight: 700; }
   .elab-bg { fill: var(--bg); }
+  .node.dragging { pointer-events: none; opacity: .9; }
+  .node.dragging rect { stroke-dasharray: 6 4; filter: drop-shadow(0 6px 10px rgba(0,0,0,.3)); }
+  .node.drop rect { stroke: var(--me); stroke-width: 5; fill: var(--me-soft); }
+  .rl { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--panel); border-radius: 12px; margin-bottom: 6px; }
+  .rl span { flex: 1; min-width: 0; }
+  .rl .btn { padding: 6px 12px; font-size: 14px; }
+  .chk { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--panel); border-radius: 12px; margin-bottom: 6px; font-size: 15px; }
+  .chk input { width: 20px; height: 20px; flex: none; }
+  .hint { color: var(--muted); font-size: 13.5px; margin: 6px 0 12px; }
 </style>
 </head>
 <body>
 <header>
   <h1 id="title">🌳 Phả Hệ</h1>
+  <button class="hbtn hidden" id="bUndo" title="Hoàn tác">↶ Hoàn tác</button>
   <button class="hbtn" id="bMe">📍 Tôi</button>
 </header>
 
@@ -144,10 +154,23 @@ const KEY = "phahe_v1";
 let D = { people: {}, me: null };
 try { const raw = localStorage.getItem(KEY); if (raw) D = JSON.parse(raw); } catch (e) {}
 D.people ||= {};
+// mỗi lần lưu giữ lại bản trước đó để bấm "Hoàn tác" khi lỡ tay
+const undoStack = []; let lastSaved = JSON.stringify(D);
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify(D)); }
+  const s = JSON.stringify(D); if (s === lastSaved) return;
+  try { localStorage.setItem(KEY, s); }
   catch (e) { toast("⚠️ Không lưu được (bộ nhớ đầy?) — hãy sao lưu ra file"); }
+  undoStack.push(lastSaved); if (undoStack.length > 50) undoStack.shift();
+  lastSaved = s; updUndo();
 }
+function updUndo() { document.getElementById("bUndo").classList.toggle("hidden", !undoStack.length); }
+function undo() {
+  if (!undoStack.length) return;
+  lastSaved = undoStack.pop(); D = JSON.parse(lastSaved);
+  try { localStorage.setItem(KEY, lastSaved); } catch (e) {}
+  updUndo(); closeSheet(); refresh(); toast("↶ Đã hoàn tác bước vừa rồi");
+}
+const revert = () => { D = JSON.parse(lastSaved); }; // bỏ các thay đổi chưa lưu
 const uid = () => Math.random().toString(36).slice(2, 10);
 const P = id => D.people[id];
 const all = () => Object.values(D.people);
@@ -165,6 +188,25 @@ function removePerson(id) {
   delete D.people[id];
   all().forEach(x => { x.parents = x.parents.filter(i => i !== id); x.spouses = x.spouses.filter(i => i !== id); });
   if (D.me === id) D.me = all()[0]?.id || null;
+}
+function unlink(a, other, type) { // type tính theo a: 'parent' (other là cha/mẹ của a) | 'child' | 'spouse'
+  if (type === "parent") P(a).parents = P(a).parents.filter(x => x !== other);
+  else if (type === "child") P(other).parents = P(other).parents.filter(x => x !== a);
+  else { P(a).spouses = P(a).spouses.filter(x => x !== other); P(other).spouses = P(other).spouses.filter(x => x !== a); }
+}
+function relationsOf(id) {
+  const p = P(id), m = x => P(x).gender === "m";
+  return [
+    ...p.parents.filter(P).map(o => ({ type: "parent", other: o, label: m(o) ? "Cha" : "Mẹ" })),
+    ...p.spouses.filter(P).map(o => ({ type: "spouse", other: o, label: m(o) ? "Chồng" : "Vợ" })),
+    ...childrenOf(id).map(c => ({ type: "child", other: c.id, label: c.gender === "m" ? "Con trai" : "Con gái" })),
+  ];
+}
+// x là tổ tiên của y?
+function isAnc(x, y) {
+  const seen = new Set(), q = [...(P(y)?.parents || [])];
+  while (q.length) { const u = q.shift(); if (u === x) return true; if (seen.has(u) || !P(u)) continue; seen.add(u); q.push(...P(u).parents); }
+  return false;
 }
 function toast(m) { const t = document.getElementById("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 2300); }
 const years = p => p.birth || p.death ? `${p.birth || "?"}${p.death ? " – " + p.death : ""}` : "";
@@ -402,12 +444,40 @@ function zoomAt(f, cx = svg.clientWidth / 2, cy = svg.clientHeight / 2) {
   const k = Math.min(3, Math.max(0.15, view.k * f)); f = k / view.k;
   view.x = cx - (cx - view.x) * f; view.y = cy - (cy - view.y) * f; view.k = k; applyView();
 }
-// kéo / chụm 2 ngón / con lăn chuột
-const ptr = new Map(); let moved = 0, pinch = null;
-svg.addEventListener("pointerdown", e => { svg.setPointerCapture(e.pointerId); ptr.set(e.pointerId, [e.clientX, e.clientY]); moved = 0; if (ptr.size === 2) pinch = null; });
+// kéo / chụm 2 ngón / con lăn chuột; nhấn giữ 1 người rồi kéo thả lên người khác để nối quan hệ
+const ptr = new Map(); let moved = 0, pinch = null, holdT = null, drag = null;
+const treePt = (cx, cy) => { const r = svg.getBoundingClientRect(); return [(cx - r.left - view.x) / view.k, (cy - r.top - view.y) / view.k]; };
+function startDrag(g, cx, cy) {
+  const n = lastLayout.nodes[g.dataset.id], [tx, ty] = treePt(cx, cy);
+  drag = { id: g.dataset.id, g, ox: tx - n.x, oy: ty - n.y, over: null };
+  g.classList.add("dragging"); g.parentNode.appendChild(g);
+  navigator.vibrate?.(30); toast("Kéo thả lên người cần nối quan hệ");
+}
+function moveDrag(cx, cy) {
+  const r = svg.getBoundingClientRect(), E = 40, sp = 12; // tới sát mép thì tự cuộn
+  if (cx - r.left < E) view.x += sp; else if (r.right - cx < E) view.x -= sp;
+  if (cy - r.top < E) view.y += sp; else if (r.bottom - cy < E) view.y -= sp;
+  applyView();
+  const [tx, ty] = treePt(cx, cy);
+  drag.g.setAttribute("transform", `translate(${tx - drag.ox},${ty - drag.oy})`);
+  const over = document.elementFromPoint(cx, cy)?.closest?.(".node:not(.dragging)")?.dataset.id || null;
+  if (over !== drag.over) {
+    svg.querySelectorAll(".node.drop").forEach(x => x.classList.remove("drop"));
+    if (over) svg.querySelector(`.node[data-id="${over}"]`)?.classList.add("drop");
+    drag.over = over;
+  }
+}
+svg.addEventListener("contextmenu", e => e.preventDefault());
+svg.addEventListener("pointerdown", e => {
+  svg.setPointerCapture(e.pointerId); ptr.set(e.pointerId, [e.clientX, e.clientY]); moved = 0; clearTimeout(holdT);
+  if (ptr.size === 2) { pinch = null; return; }
+  const g = e.target.closest(".node");
+  if (g) holdT = setTimeout(() => { if (ptr.size === 1 && moved < 8) { const [x, y] = [...ptr.values()][0]; startDrag(g, x, y); } }, 450);
+});
 svg.addEventListener("pointermove", e => {
   if (!ptr.has(e.pointerId)) return;
   const [ox, oy] = ptr.get(e.pointerId); ptr.set(e.pointerId, [e.clientX, e.clientY]);
+  if (drag) return moveDrag(e.clientX, e.clientY);
   if (ptr.size === 1) { view.x += e.clientX - ox; view.y += e.clientY - oy; moved += Math.abs(e.clientX - ox) + Math.abs(e.clientY - oy); applyView(); }
   else if (ptr.size === 2) {
     const [a, b] = [...ptr.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -415,17 +485,78 @@ svg.addEventListener("pointermove", e => {
     if (pinch) { zoomAt(d / pinch.d, cx, cy); view.x += cx - pinch.cx; view.y += cy - pinch.cy; applyView(); }
     pinch = { d, cx, cy }; moved = 99;
   }
+  if (moved >= 8) clearTimeout(holdT);
 });
-const up = e => { ptr.delete(e.pointerId); if (ptr.size < 2) pinch = null; };
+const up = e => { ptr.delete(e.pointerId); if (ptr.size < 2) pinch = null; clearTimeout(holdT); };
 svg.addEventListener("pointerup", e => {
+  if (drag) {
+    const { id, over } = drag; drag = null; up(e);
+    if (over && over !== id) return openLinkSheet(id, over);
+    return renderTree();
+  }
   if (moved < 8 && ptr.size === 1) { const g = e.target.closest(".node"); if (g) openPerson(g.dataset.id); }
   up(e);
 });
-svg.addEventListener("pointercancel", up);
+svg.addEventListener("pointercancel", e => { if (drag) { drag = null; renderTree(); } up(e); });
+
+/* ================== Nối lại quan hệ sau khi kéo thả ================== */
+let linkCtx = null;
+function openLinkSheet(a, b) {
+  const A = P(a), B = P(b), an = esc(A.name), bn = esc(B.name);
+  const rs = relationsOf(a);
+  linkCtx = { a, b, rs };
+  openSheet(`<h2 style="margin:0 0 6px">🔗 Nối quan hệ</h2>
+    <p style="margin:0 0 12px"><b style="color:var(--brand)">${an}</b> là gì của <b style="color:var(--brand)">${bn}</b>?</p>
+    <div class="grid2">
+      <button class="btn soft" data-link="parent">${A.gender === "m" ? "👨 Cha" : "👩 Mẹ"} của ${bn}</button>
+      <button class="btn soft" data-link="child">👶 Con của ${bn}</button>
+      <button class="btn soft" data-link="spouse">💍 ${A.gender === "m" ? "Chồng" : "Vợ"} của ${bn}</button>
+      <button class="btn soft" data-link="sibling">🧑‍🤝‍🧑 Anh / chị / em của ${bn}</button>
+    </div>
+    ${rs.length ? `<h3 style="margin:14px 0 4px">Gỡ quan hệ cũ của ${an}?</h3><p class="hint">Đánh dấu những quan hệ bị nối sai để gỡ luôn.</p>
+      ${rs.map((r, i) => `<label class="chk"><input type="checkbox" data-i="${i}" ${r.other === b ? "checked" : ""}> <span>${r.label}: <b>${esc(P(r.other).name)}</b></span></label>`).join("")}` : ""}
+    <div class="btns" style="margin-top:10px"><button class="btn soft" id="lCancel">Hủy</button></div>`);
+}
+function applyLink(kind, auto = false) {
+  const { a, b, rs } = linkCtx, A = P(a), B = P(b);
+  const checked = [...sheet.querySelectorAll(".chk input:checked")].map(c => rs[+c.dataset.i]);
+  // lần 2 (auto): người này bị đặt sai đời nên gỡ hết quan hệ cha mẹ / con cũ của họ
+  (auto ? rs.filter(r => r.type !== "spouse") : checked).forEach(r => unlink(a, r.other, r.type));
+  // giữa 2 người chỉ giữ 1 quan hệ trực tiếp
+  unlink(a, b, "parent"); unlink(a, b, "child"); unlink(a, b, "spouse");
+  let note = "";
+  if (kind === "parent") {
+    const same = B.parents.map(P).find(x => x && x.gender === A.gender);
+    if (same) { unlink(b, same.id, "parent"); note = ` (thay cho ${same.name})`; }
+    link(a, b, "parent");
+    B.parents.filter(x => x !== a).forEach(o => link(o, a, "spouse"));
+  } else if (kind === "child") {
+    link(b, a, "parent");
+    const sp = B.spouses.map(P).filter(Boolean);
+    if (sp.length === 1 && !A.parents.some(x => P(x)?.gender === sp[0].gender)) { link(sp[0].id, a, "parent"); note = ` (và ${sp[0].name})`; }
+  } else if (kind === "spouse") link(a, b, "spouse");
+  else if (kind === "sibling") {
+    if (!B.parents.length) {
+      const fa = newPerson({ name: "Cha của " + B.name, gender: "m" }), mo = newPerson({ name: "Mẹ của " + B.name, gender: "f" });
+      link(fa.id, b, "parent"); link(mo.id, b, "parent"); link(fa.id, mo.id, "spouse"); note = " (đã tạo tạm cha mẹ)";
+    }
+    A.parents = [...B.parents];
+  }
+  if (isAnc(a, a) || isAnc(b, b)) {
+    revert();
+    if (!auto) return applyLink(kind, true);
+    closeSheet(); renderTree(); return toast("⚠️ Không nối được vì sẽ thành vòng lặp (vừa là cha vừa là cháu).");
+  }
+  if (auto) note += ` — đã gỡ quan hệ cha mẹ/con cũ bị sai của ${A.name}`;
+  save(); closeSheet(); refresh();
+  const lab = { parent: A.gender === "m" ? "cha" : "mẹ", child: "con", spouse: A.gender === "m" ? "chồng" : "vợ", sibling: "anh/chị/em" }[kind];
+  toast(`✔ ${A.name} giờ là ${lab} của ${B.name}${note}`);
+}
 svg.addEventListener("wheel", e => { e.preventDefault(); const r = svg.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
 document.getElementById("zIn").onclick = () => zoomAt(1.25);
 document.getElementById("zOut").onclick = () => zoomAt(0.8);
 document.getElementById("zFit").onclick = fitAll;
+document.getElementById("bUndo").onclick = undo;
 document.getElementById("bMe").onclick = () => { show("tree"); if (D.me) centerOn(D.me, 1); };
 
 /* ================== Danh sách ================== */
@@ -463,7 +594,7 @@ function openPerson(id) {
       ${rel("Cha mẹ", parents)}${rel("Vợ / chồng", spouses)}${rel("Con", kids)}
       ${p.note ? `<dt>Ghi chú</dt><dd>${esc(p.note).replace(/\n/g, "<br>")}</dd>` : ""}
     </dl>
-    <h3 style="margin:4px 0 8px">➕ Thêm người thân của ${esc(p.name.split(" ").pop() || "người này")}</h3>
+    <h3 style="margin:4px 0 8px">➕ Thêm người thân cho <span style="color:var(--brand)">${esc(p.name || "người này")}</span></h3>
     <div class="grid2">
       <button class="btn soft" data-add="father" data-id="${id}">👨 Cha</button>
       <button class="btn soft" data-add="mother" data-id="${id}">👩 Mẹ</button>
@@ -504,9 +635,16 @@ function personForm(f) {
     <label class="f">Số điện thoại<input id="fPhone" inputmode="tel" value="${esc(p.phone)}"></label>
     <label class="f">Địa chỉ / quê quán<input id="fAddr" value="${esc(p.address)}"></label>
     <label class="f">Ghi chú<textarea id="fNote" rows="3">${esc(p.note)}</textarea></label>
+    ${f.mode === "edit" ? relSection(f.id) : ""}
     <label class="f">Ảnh<div class="btns" style="align-items:center;margin-top:6px">${f.photo ? `<div class="av" style="background-image:url(${f.photo})"></div>` : ""}
       <button class="btn soft" id="fPhotoBtn" type="button">📷 ${f.photo ? "Đổi ảnh" : "Chọn ảnh"}</button>${f.photo ? `<button class="btn soft" id="fPhotoDel" type="button">Bỏ ảnh</button>` : ""}</div></label>`}
     <div class="btns" style="margin-top:6px"><button class="btn" id="fSave">💾 Lưu</button><button class="btn soft" id="fCancel">Hủy</button></div>`);
+}
+function relSection(id) {
+  const rs = relationsOf(id);
+  return `<h3 style="margin:14px 0 8px">🔗 Quan hệ của ${esc(P(id).name)}</h3>
+    ${rs.map(r => `<div class="rl"><span>${r.label}: <b>${esc(P(r.other).name)}</b></span><button class="btn danger" type="button" data-unlink="${r.type}|${r.other}">Gỡ</button></div>`).join("") || `<p class="hint">Chưa nối với ai.</p>`}
+    <p class="hint">💡 Nối sai chỗ? Bấm <b>Gỡ</b> ở trên, hoặc ra màn hình Cây: <b>nhấn giữ</b> người này rồi <b>kéo thả</b> lên người đúng để nối lại.</p>`;
 }
 function readForm() {
   return {
@@ -542,8 +680,9 @@ function saveForm() {
     }
     base.parents.forEach(pa => link(pa, target.id, "parent"));
   }
-  save(); refresh(); openPerson(target.id);
-  if (!made) toast("✔ Đã thêm");
+  // ở lại người đang thêm (VD: đang ở "Tôi" thêm cha xong thì thêm mẹ vẫn là mẹ của "Tôi")
+  save(); refresh(); openPerson(base.id);
+  if (!made) toast(`✔ Đã thêm ${ADD_LABEL[f.rel].replace("Thêm ", "")}: ${target.name}`);
 }
 function pickPhoto() {
   const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
@@ -577,6 +716,13 @@ sheet.addEventListener("click", e => {
     if (!t.dataset.armed) { t.dataset.armed = 1; t.textContent = "Bấm lần nữa để xóa"; return setTimeout(() => { if (t.isConnected) { delete t.dataset.armed; t.textContent = "🗑 Xóa"; } }, 3000); }
     removePerson(d.del); save(); closeSheet(); refresh(); return toast("Đã xóa");
   }
+  if (d.unlink) {
+    const [type, other] = d.unlink.split("|"), keep = readForm();
+    unlink(form.id, other, type); save(); refresh(); personForm(form); restoreForm(keep);
+    return toast(`Đã gỡ quan hệ với ${P(other).name} — bấm ↶ Hoàn tác nếu lỡ tay`);
+  }
+  if (d.link) return applyLink(d.link);
+  if (t.id === "lCancel") { closeSheet(); return renderTree(); }
   if (d.g) { const keep = readForm(); form.gender = d.g; personForm(form); return restoreForm(keep); }
   if (d.src) { form.useExisting = d.src === "old"; return personForm(form); }
   if (t.id === "fPhotoBtn") return pickPhoto();
@@ -595,7 +741,7 @@ function renderMore() {
       <p>File sao lưu (.json) gửi qua Zalo / Messenger cho người nhà, họ mở bằng nút "Mở file sao lưu" là có cùng cây.</p></div>
     <div class="card"><h3>📱 Cài như app</h3><p><b>Android (Chrome):</b> bấm ⋮ → <b>Thêm vào màn hình chính</b>.<br><b>iPhone (Safari):</b> bấm nút Chia sẻ → <b>Thêm vào MH chính</b>.<br>Sau đó mở như app bình thường, không cần mạng.</p></div>
     <div class="card"><h3>💡 Mẹo</h3><p>• Điền <b>năm sinh</b> hoặc <b>con thứ mấy</b> để app phân biệt anh/em, chú/bác, anh họ/em họ.<br>
-      • Người nào đã có trên cây mà cần nối thêm (VD: vợ của chú), chọn <b>"Chọn người đã có"</b> khi thêm quan hệ.<br>• Cách gọi theo kiểu miền Nam (cô, dượng, cậu, mợ, dì…).</p></div>
+      • Người nào đã có trên cây mà cần nối thêm (VD: vợ của chú), chọn <b>"Chọn người đã có"</b> khi thêm quan hệ.<br>• Lỡ nối sai (VD: mẹ thành con gái)? Trên <b>Cây</b>, <b>nhấn giữ</b> người đó rồi <b>kéo thả</b> lên người đúng để nối lại; hoặc bấm <b>↶ Hoàn tác</b> trên cùng.<br>• Cách gọi theo kiểu miền Nam (cô, dượng, cậu, mợ, dì…).</p></div>
     <div class="card"><h3>🗑 Làm lại từ đầu</h3><button class="btn danger" id="bWipe">Xóa toàn bộ cây trên máy này</button></div>`;
   document.getElementById("bExport").onclick = exportData;
   document.getElementById("bImport").onclick = importData;
