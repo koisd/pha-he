@@ -733,13 +733,14 @@ sheet.addEventListener("click", e => {
 document.getElementById("list").addEventListener("click", e => { const r = e.target.closest("[data-open]"); if (r) openPerson(r.dataset.open); });
 
 /* ================== Sao lưu ================== */
+const APPVER = 4;
 function renderMore() {
   const n = all().length;
   document.getElementById("more").innerHTML = `
     <div class="card"><h3>💾 Dữ liệu</h3><p>Cây có <b>${n}</b> người. Dữ liệu chỉ nằm trong trình duyệt của <b>điện thoại này</b> — xóa dữ liệu trình duyệt là mất, nên sao lưu thường xuyên.</p>
       <div class="btns"><button class="btn" id="bExport">⬇️ Sao lưu ra file</button><button class="btn soft" id="bImport">⬆️ Mở file sao lưu</button></div>
       <p>File sao lưu (.json) gửi qua Zalo / Messenger cho người nhà, họ mở bằng nút "Mở file sao lưu" là có cùng cây.</p></div>
-    <div class="card"><h3>📱 Cài như app</h3><p><b>Android (Chrome):</b> bấm ⋮ → <b>Thêm vào màn hình chính</b>.<br><b>iPhone (Safari):</b> bấm nút Chia sẻ → <b>Thêm vào MH chính</b>.<br>Sau đó mở như app bình thường, không cần mạng.</p></div>
+    <div class="card"><h3>📱 Cài như app</h3><p><b>Android (Chrome):</b> bấm ⋮ → <b>Thêm vào màn hình chính</b>.<br><b>iPhone (Safari):</b> bấm nút Chia sẻ → <b>Thêm vào MH chính</b>.<br>Sau đó mở như app bình thường, không cần mạng.<br>Có bản mới thì chỉ cần mở app khi có mạng là tự cập nhật, <b>không cần cài lại</b>.</p><p style="opacity:.6">Phiên bản: ${APPVER}</p></div>
     <div class="card"><h3>💡 Mẹo</h3><p>• Điền <b>năm sinh</b> hoặc <b>con thứ mấy</b> để app phân biệt anh/em, chú/bác, anh họ/em họ.<br>
       • Người nào đã có trên cây mà cần nối thêm (VD: vợ của chú), chọn <b>"Chọn người đã có"</b> khi thêm quan hệ.<br>• Lỡ nối sai (VD: mẹ thành con gái)? Trên <b>Cây</b>, <b>nhấn giữ</b> người đó rồi <b>kéo thả</b> lên người đúng để nối lại; hoặc bấm <b>↶ Hoàn tác</b> trên cùng.<br>• Cách gọi theo kiểu miền Nam (cô, dượng, cậu, mợ, dì…).</p></div>
     <div class="card"><h3>🗑 Làm lại từ đầu</h3><button class="btn danger" id="bWipe">Xóa toàn bộ cây trên máy này</button></div>`;
@@ -820,7 +821,16 @@ function refresh() {
 refresh();
 if (all().length) setTimeout(() => D.me ? centerOn(D.me, 1) : fitAll(), 50);
 addEventListener("resize", () => applyView());
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
+// Mỗi lần mở / quay lại app thì hỏi có bản mới không; có thì tự tải lại trang
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  const hadSW = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
+    reg.update();
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); });
+  }).catch(() => {});
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadSW && !reloaded) { reloaded = true; location.reload(); } });
+}
 </script>
 </body>
 </html>
