@@ -377,6 +377,23 @@ function layout() {
     const cur = avg(row.map(i => pos[i])); const sh = ideal - cur;
     row.forEach(i => pos[i] += sh);
   });
+  [...gList].reverse().forEach(g => {
+    const row = units[g]; let previousRight = -Infinity;
+    row.forEach((u, index) => {
+      const left = Math.min(...u.map(i => pos[i]));
+      const right = Math.max(...u.map(i => pos[i] + NW));
+      const kids = [...new Set(u.flatMap(i => childrenOf(i).filter(c => gen[c.id] === g + 1)))];
+      const kidLeft = kids.length ? Math.min(...kids.map(c => pos[c.id])) : left;
+      const kidRight = kids.length ? Math.max(...kids.map(c => pos[c.id] + NW)) : right;
+      const desired = (kidLeft + kidRight - left - right) / 2;
+      const minShift = previousRight === -Infinity ? -Infinity : previousRight + GX - left;
+      const nextLeft = row[index + 1] ? Math.min(...row[index + 1].map(i => pos[i])) : Infinity;
+      const maxShift = nextLeft - GX - right;
+      const shift = Math.max(minShift, Math.min(maxShift, desired));
+      u.forEach(i => pos[i] += shift);
+      previousRight = right + shift;
+    });
+  });
   const nodes = {};
   ids.forEach(i => nodes[i] = { x: pos[i], y: (gen[i] - gList[0]) * (NH + GY) });
   return { nodes, gens: gen };
@@ -405,18 +422,36 @@ function renderTree() {
     if (!families.has(key)) families.set(key, { parents, children: [] });
     families.get(key).children.push(c);
   });
-  families.forEach(({ parents, children }) => {
-    const px = parents.reduce((s, p) => s + N[p].x + NW / 2, 0) / parents.length;
-    const py = Math.max(...parents.map(p => N[p].y)) + (parents.length > 1 ? NH / 2 : NH);
-    const childXs = children.map(c => N[c.id].x + NW / 2);
-    const cy = Math.min(...children.map(c => N[c.id].y));
-    const mid = cy - GY / 2.4;
-    edges += `<path class="edge" d="M${px} ${py} V${mid} H${Math.min(...childXs)} H${Math.max(...childXs)}${children.map(c => ` M${N[c.id].x + NW / 2} ${mid} V${N[c.id].y}`).join("")}"/>`;
-    children.forEach(c => {
-      const cx = N[c.id].x + NW / 2, childY = N[c.id].y;
-      const t = c.order ? `con thứ ${esc(c.order)}` : c.gender === "m" ? "con trai" : "con gái";
-      const w = t.length * 6.2 + 8;
-      labels += `<rect class="elab-bg" x="${cx - w / 2}" y="${childY - 24}" width="${w}" height="15" rx="4"/><text class="elab" x="${cx}" y="${childY - 13}" text-anchor="middle">${t}</text>`;
+  const familyRows = new Map();
+  families.forEach(family => {
+    const { parents, children } = family;
+    family.px = parents.reduce((s, p) => s + N[p].x + NW / 2, 0) / parents.length;
+    family.py = Math.max(...parents.map(p => N[p].y)) + (parents.length > 1 ? NH / 2 : NH);
+    family.childXs = children.map(c => N[c.id].x + NW / 2);
+    family.minX = Math.min(...family.childXs);
+    family.maxX = Math.max(...family.childXs);
+    family.cy = Math.min(...children.map(c => N[c.id].y));
+    family.mid = family.cy - GY / 2.4;
+    const row = familyRows.get(family.cy) || [];
+    row.push(family);
+    familyRows.set(family.cy, row);
+  });
+  familyRows.forEach(row => {
+    row.sort((a, b) => a.px - b.px);
+    row.forEach((family, index) => {
+      const { parents, children, px, py, childXs, minX, maxX, cy, mid } = family;
+      const parentBottom = py + NH / 2;
+      const laneGap = Math.min(8, (mid - parentBottom - 8) / row.length);
+      const routeY = parentBottom + 8 + (row.length - index - 1) * laneGap;
+      const portX = px < minX ? minX - GX / 2 : px > maxX ? maxX + GX / 2
+        : px - minX < maxX - px ? minX - GX / 2 : maxX + GX / 2;
+      edges += `<path class="edge" d="M${px} ${py} V${routeY} H${portX} V${mid} H${minX} H${maxX}${children.map(c => ` M${N[c.id].x + NW / 2} ${mid} V${N[c.id].y}`).join("")}"/>`;
+      children.forEach(c => {
+        const cx = N[c.id].x + NW / 2, childY = N[c.id].y;
+        const t = c.order ? `con thứ ${esc(c.order)}` : c.gender === "m" ? "con trai" : "con gái";
+        const w = t.length * 6.2 + 8;
+        labels += `<rect class="elab-bg" x="${cx - w / 2}" y="${childY - 24}" width="${w}" height="15" rx="4"/><text class="elab" x="${cx}" y="${childY - 13}" text-anchor="middle">${t}</text>`;
+      });
     });
   });
   all().forEach(p => {
@@ -743,7 +778,7 @@ sheet.addEventListener("click", e => {
 document.getElementById("list").addEventListener("click", e => { const r = e.target.closest("[data-open]"); if (r) openPerson(r.dataset.open); });
 
 /* ================== Sao lưu ================== */
-const APPVER = 6;
+const APPVER = 7;
 function renderMore() {
   const n = all().length;
   document.getElementById("more").innerHTML = `
