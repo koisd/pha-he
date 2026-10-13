@@ -366,8 +366,13 @@ function layout() {
     gList.forEach(g => units[g].forEach(u => { u.key = avg(u.flatMap(i => P(i).parents.filter(p => pos[p] !== undefined).map(p => pos[p]))) ?? u.key ?? pos[u[0]]; }));
     gList.forEach(g => { units[g].sort((a, b) => a.key - b.key); });
     place();
-    [...gList].reverse().forEach(g => units[g].forEach(u => { const k = avg(u.flatMap(i => childrenOf(i).map(c => pos[c.id]))); u.key = k ?? pos[u[0]]; }));
-    gList.forEach(g => units[g].sort((a, b) => a.key - b.key));
+    // xếp theo vị trí con, nhưng anh em cùng cha mẹ luôn đứng cạnh nhau (theo vị trí cha mẹ trước, rồi mới theo con)
+    [...gList].reverse().forEach(g => units[g].forEach(u => {
+      const ck = avg(u.flatMap(i => childrenOf(i).map(c => pos[c.id]))) ?? pos[u[0]];
+      const pk = avg(u.flatMap(i => P(i).parents.filter(p => pos[p] !== undefined).map(p => pos[p])));
+      u.key = pk ?? ck; u.key2 = ck;
+    }));
+    gList.forEach(g => units[g].sort((a, b) => (a.key - b.key) || (a.key2 - b.key2)));
     place();
   }
   // căn giữa từng đời theo vị trí "lý tưởng" (trung bình cha mẹ) để cây thẳng hơn
@@ -422,30 +427,41 @@ function renderTree() {
     if (!families.has(key)) families.set(key, { parents, children: [] });
     families.get(key).children.push(c);
   });
+  // Mỗi cặp cha mẹ có một thanh ngang riêng phía trên hàng con. Đường từ cha mẹ rơi THẲNG xuống thanh đó.
+  // Nếu trong cùng một hàng, điểm xuất phát của cặp này rơi trúng thanh của cặp khác (vd: ông có 2 bà),
+  // thì thanh của cặp đó được nâng cao hơn để hai đường không cắt nhau.
   const familyRows = new Map();
   families.forEach(family => {
     const { parents, children } = family;
     family.px = parents.reduce((s, p) => s + N[p].x + NW / 2, 0) / parents.length;
     family.py = Math.max(...parents.map(p => N[p].y)) + (parents.length > 1 ? NH / 2 : NH);
+    family.bottom = Math.max(...parents.map(p => N[p].y)) + NH;
     family.childXs = children.map(c => N[c.id].x + NW / 2);
     family.minX = Math.min(...family.childXs);
     family.maxX = Math.max(...family.childXs);
+    family.left = Math.min(family.minX, family.px);
+    family.right = Math.max(family.maxX, family.px);
     family.cy = Math.min(...children.map(c => N[c.id].y));
-    family.mid = family.cy - GY / 2.4;
+    family.level = 0;
     const row = familyRows.get(family.cy) || [];
     row.push(family);
     familyRows.set(family.cy, row);
   });
   familyRows.forEach(row => {
-    row.sort((a, b) => a.px - b.px);
-    row.forEach((family, index) => {
-      const { parents, children, px, py, childXs, minX, maxX, cy, mid } = family;
-      const parentBottom = py + NH / 2;
-      const laneGap = Math.min(8, (mid - parentBottom - 8) / row.length);
-      const routeY = parentBottom + 8 + (row.length - index - 1) * laneGap;
-      const portX = px < minX ? minX - GX / 2 : px > maxX ? maxX + GX / 2
-        : px - minX < maxX - px ? minX - GX / 2 : maxX + GX / 2;
-      edges += `<path class="edge" d="M${px} ${py} V${routeY} H${portX} V${mid} H${minX} H${maxX}${children.map(c => ` M${N[c.id].x + NW / 2} ${mid} V${N[c.id].y}`).join("")}"/>`;
+    // j phải nằm trên i nếu đường rơi của j (tại px_j) đi xuyên qua thanh của i
+    const above = (j, i) => j !== i && j.px > i.left + 1 && j.px < i.right - 1;
+    for (let it = 0; it < row.length; it++) {
+      let changed = false;
+      row.forEach(i => row.forEach(j => { if (above(j, i) && j.level < i.level + 1) { j.level = i.level + 1; changed = true; } }));
+      if (!changed) break;
+    }
+    const maxLevel = Math.max(...row.map(f => f.level));
+    row.forEach(family => {
+      const { children, px, py, childXs, left, right, cy, bottom, level } = family;
+      const baseMid = cy - GY / 2.4;
+      const step = maxLevel ? Math.min(14, (baseMid - bottom - 10) / maxLevel) : 0;
+      const mid = baseMid - level * step;
+      edges += `<path class="edge" d="M${px} ${py} V${mid} M${left} ${mid} H${right}${childXs.map(x => ` M${x} ${mid} V${cy}`).join("")}"/>`;
       children.forEach(c => {
         const cx = N[c.id].x + NW / 2, childY = N[c.id].y;
         const t = c.order ? `con thứ ${esc(c.order)}` : c.gender === "m" ? "con trai" : "con gái";
@@ -778,7 +794,7 @@ sheet.addEventListener("click", e => {
 document.getElementById("list").addEventListener("click", e => { const r = e.target.closest("[data-open]"); if (r) openPerson(r.dataset.open); });
 
 /* ================== Sao lưu ================== */
-const APPVER = 7;
+const APPVER = 8;
 function renderMore() {
   const n = all().length;
   document.getElementById("more").innerHTML = `
