@@ -398,16 +398,26 @@ function renderTree() {
     else edges += `<path class="edge sp" d="M${a.x + NW / 2} ${a.y + NH / 2} L${b.x + NW / 2} ${b.y + NH / 2}"/>`;
   }));
   // cha mẹ → con: xuất phát từ giữa cặp cha mẹ
+  const families = new Map();
   all().forEach(c => {
-    const ps = c.parents.filter(p => N[p]); if (!ps.length) return;
-    const px = ps.reduce((s, p) => s + N[p].x + NW / 2, 0) / ps.length;
-    const py = Math.max(...ps.map(p => N[p].y)) + (ps.length > 1 ? NH / 2 : NH);
-    const cx = N[c.id].x + NW / 2, cy = N[c.id].y;
+    const parents = c.parents.filter(p => N[p]).sort(); if (!parents.length) return;
+    const key = parents.join("|");
+    if (!families.has(key)) families.set(key, { parents, children: [] });
+    families.get(key).children.push(c);
+  });
+  families.forEach(({ parents, children }) => {
+    const px = parents.reduce((s, p) => s + N[p].x + NW / 2, 0) / parents.length;
+    const py = Math.max(...parents.map(p => N[p].y)) + (parents.length > 1 ? NH / 2 : NH);
+    const childXs = children.map(c => N[c.id].x + NW / 2);
+    const cy = Math.min(...children.map(c => N[c.id].y));
     const mid = cy - GY / 2.4;
-    edges += `<path class="edge" d="M${px} ${py} V${mid} H${cx} V${cy}"/>`;
-    const t = c.gender === "m" ? "con trai" : "con gái";
-    const w = t.length * 6.2 + 8;
-    labels += `<rect class="elab-bg" x="${cx - w / 2}" y="${cy - 24}" width="${w}" height="15" rx="4"/><text class="elab" x="${cx}" y="${cy - 13}" text-anchor="middle">${t}</text>`;
+    edges += `<path class="edge" d="M${px} ${py} V${mid} H${Math.min(...childXs)}${children.map(c => ` M${N[c.id].x + NW / 2} ${mid} V${N[c.id].y}`).join("")}"/>`;
+    children.forEach(c => {
+      const cx = N[c.id].x + NW / 2, childY = N[c.id].y;
+      const t = c.gender === "m" ? "con trai" : "con gái";
+      const w = t.length * 6.2 + 8;
+      labels += `<rect class="elab-bg" x="${cx - w / 2}" y="${childY - 24}" width="${w}" height="15" rx="4"/><text class="elab" x="${cx}" y="${childY - 13}" text-anchor="middle">${t}</text>`;
+    });
   });
   all().forEach(p => {
     const n = N[p.id]; if (!n) return;
@@ -733,7 +743,7 @@ sheet.addEventListener("click", e => {
 document.getElementById("list").addEventListener("click", e => { const r = e.target.closest("[data-open]"); if (r) openPerson(r.dataset.open); });
 
 /* ================== Sao lưu ================== */
-const APPVER = 4;
+const APPVER = 5;
 function renderMore() {
   const n = all().length;
   document.getElementById("more").innerHTML = `
