@@ -362,17 +362,40 @@ function layout() {
   const place = () => gList.forEach(g => { let x = 0; units[g].forEach(u => u.forEach(i => { pos[i] = x; x += NW + GX; }) || (x += GX)); });
   place();
   const avg = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
+  // Sắp các cụm trong một đời: gom anh em ruột (cùng cha mẹ) thành nhóm → anh em ruột luôn đứng liền nhau,
+  // đường nối không chen vào nhau. Khóa của cụm = vị trí trung bình cha mẹ (của mọi thành viên, kể cả bên vợ/chồng)
+  // để cặp vợ chồng nối hai nhà đứng ở biên nhóm; cụm không có cha mẹ (đời đầu) xếp theo vị trí con.
+  const sortGen = us => {
+    us.forEach(u => {
+      u.pk = avg(u.flatMap(i => P(i).parents.filter(p => pos[p] !== undefined).map(p => pos[p])));
+      u.ck = avg(u.flatMap(i => childrenOf(i).map(c => pos[c.id])));
+      u.key = u.pk ?? u.ck ?? pos[u[0]];
+    });
+    // người có nhiều vợ/chồng đứng giữa; các bà xếp theo vị trí con của mình (bà có con bên trái đứng bên trái)
+    us.forEach(u => {
+      if (u.length < 3) return;
+      const c = u.reduce((m, x) => P(x).spouses.length > P(m).spouses.length ? x : m, u[0]);
+      const k = i => avg(childrenOf(i).map(ch => pos[ch.id])) ?? pos[i];
+      const rest = u.filter(x => x !== c).sort((a, b) => k(a) - k(b));
+      u.length = 0; u.push(rest[0], c, ...rest.slice(1));
+    });
+    const groups = new Map();
+    us.forEach(u => {
+      const anchor = u.find(i => P(i).parents.some(p => pos[p] !== undefined));
+      const gk = anchor ? P(anchor).parents.filter(p => pos[p] !== undefined).sort().join("|") : "solo:" + u[0];
+      if (!groups.has(gk)) groups.set(gk, []);
+      groups.get(gk).push(u);
+    });
+    const gs = [...groups.values()];
+    const by = (a, b) => (a.key - b.key) || ((a.ck ?? pos[a[0]]) - (b.ck ?? pos[b[0]])) || (pos[a[0]] - pos[b[0]]);
+    gs.forEach(g => { g.key = avg(g.map(u => u.key)); g.sort(by); });
+    gs.sort((a, b) => a.key - b.key);
+    return gs.flat();
+  };
   for (let it = 0; it < 6; it++) {
-    gList.forEach(g => units[g].forEach(u => { u.key = avg(u.flatMap(i => P(i).parents.filter(p => pos[p] !== undefined).map(p => pos[p]))) ?? u.key ?? pos[u[0]]; }));
-    gList.forEach(g => { units[g].sort((a, b) => a.key - b.key); });
+    gList.forEach(g => { units[g] = sortGen(units[g]); });
     place();
-    // xếp theo vị trí con, nhưng anh em cùng cha mẹ luôn đứng cạnh nhau (theo vị trí cha mẹ trước, rồi mới theo con)
-    [...gList].reverse().forEach(g => units[g].forEach(u => {
-      const ck = avg(u.flatMap(i => childrenOf(i).map(c => pos[c.id]))) ?? pos[u[0]];
-      const pk = avg(u.flatMap(i => P(i).parents.filter(p => pos[p] !== undefined).map(p => pos[p])));
-      u.key = pk ?? ck; u.key2 = ck;
-    }));
-    gList.forEach(g => units[g].sort((a, b) => (a.key - b.key) || (a.key2 - b.key2)));
+    [...gList].reverse().forEach(g => { units[g] = sortGen(units[g]); });
     place();
   }
   // căn giữa từng đời theo vị trí "lý tưởng" (trung bình cha mẹ) để cây thẳng hơn
