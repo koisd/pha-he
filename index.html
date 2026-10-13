@@ -411,10 +411,10 @@ function renderTree() {
     const childXs = children.map(c => N[c.id].x + NW / 2);
     const cy = Math.min(...children.map(c => N[c.id].y));
     const mid = cy - GY / 2.4;
-    edges += `<path class="edge" d="M${px} ${py} V${mid} H${Math.min(...childXs)}${children.map(c => ` M${N[c.id].x + NW / 2} ${mid} V${N[c.id].y}`).join("")}"/>`;
+    edges += `<path class="edge" d="M${px} ${py} V${mid} H${Math.min(...childXs)} H${Math.max(...childXs)}${children.map(c => ` M${N[c.id].x + NW / 2} ${mid} V${N[c.id].y}`).join("")}"/>`;
     children.forEach(c => {
       const cx = N[c.id].x + NW / 2, childY = N[c.id].y;
-      const t = c.gender === "m" ? "con trai" : "con gái";
+      const t = c.order ? `con thứ ${esc(c.order)}` : c.gender === "m" ? "con trai" : "con gái";
       const w = t.length * 6.2 + 8;
       labels += `<rect class="elab-bg" x="${cx - w / 2}" y="${childY - 24}" width="${w}" height="15" rx="4"/><text class="elab" x="${cx}" y="${childY - 13}" text-anchor="middle">${t}</text>`;
     });
@@ -743,7 +743,7 @@ sheet.addEventListener("click", e => {
 document.getElementById("list").addEventListener("click", e => { const r = e.target.closest("[data-open]"); if (r) openPerson(r.dataset.open); });
 
 /* ================== Sao lưu ================== */
-const APPVER = 5;
+const APPVER = 6;
 function renderMore() {
   const n = all().length;
   document.getElementById("more").innerHTML = `
